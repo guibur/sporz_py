@@ -7,10 +7,11 @@ ROLE_LIST = [Role.BASE_MUTANT, Role.DOCTOR, Role.ASTRONAUT]
 GENOME_LIST = [Genome.NORMAL, Genome.HOST, Genome.RESISTANT]
 
 def test_chief_election():
+    game = Game(PLAYER_LIST, ROLE_LIST, GENOME_LIST)
     turn = ChiefElectionTurn(1)
     assert turn.get_info()['elected'] == 1
     state = {'chief': None, 'mutants': set(), 'dead': set(), 'paralyzed': None}
-    turn.act(None, state)
+    turn.act(game.players, state)
     assert state['chief'] == 1
     
 def test_mutant_turn():
@@ -24,8 +25,8 @@ def test_mutant_turn():
     res = turn.act(game.players, state)
     assert state['mutants'] == set()
     assert state['paralyzed'] == 0
-    assert res['failed_to_mutate'] == 2
-    assert res['mutated'] == None
+    assert res['failed_to_mutate'] == "c"
+    assert res['mutated'] is None
     
     turn = MutantTurn(1, 'mutate', 0)
     turn.act(game.players, state)
