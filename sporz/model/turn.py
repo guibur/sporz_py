@@ -1,11 +1,15 @@
+import typing as tp
+
 from ..enum_api import Turn, Genome
+from ..message_api import Player, State, ActionMessage
+from ..message_api import ResultMessage, ResultAction, ResultSimpleObservation, ResultSpyInspector
 
 
 class AbstractTurn:
-    def __init__(self, turn_type):
+    def __init__(self, turn_type: Turn):
         self.type = turn_type
 
-    def act(self, players, state):
+    def act(self, players: tp.List[Player], state: State) -> ResultMessage:
         pass
 
     def get_info(self):
@@ -13,11 +17,11 @@ class AbstractTurn:
 
 
 class ChiefElectionTurn(AbstractTurn):
-    def __init__(self, chief):
+    def __init__(self, action: ActionMessage):
         super().__init__(Turn.D_CHIEF_ELECTION)
-        self.chief = chief
+        self.chief = action.target
 
-    def act(self, players, state):
+    def act(self, players: tp.List[Player], state: State) -> ResultSimpleObservation:
         state["chief"] = self.chief
         return {"type": Turn.D_CHIEF_ELECTION, "chief_idx": self.chief, "chief_name": players[self.chief]["name"]}
 
@@ -26,11 +30,11 @@ class ChiefElectionTurn(AbstractTurn):
 
 
 class MutantTurn(AbstractTurn):
-    def __init__(self, target, do, paralyze):
+    def __init__(self, action: ActionMessage):
         super().__init__(Turn.N_MUTANTS)
-        self.target = target
-        self.do = do
-        self.paralyze = paralyze
+        self.target = action.target
+        self.do = action.action
+        self.paralyze = action.secondary_target
 
     def act(self, players, state):
         result_actions = {
@@ -64,16 +68,18 @@ class MutantTurn(AbstractTurn):
 
 
 class DoctorTurn(AbstractTurn):
-    def __init__(self, targets, dos):
+    def __init__(self, action: ActionMessage):
         super().__init__(Turn.N_DOCTORS)
-        self.targets = targets
-        self.dos = dos
+        self.targets = [action.target]
+        if action.secondary_target is not None:
+            self.targets.append(action.secondary_target)
+        self.dos = action.action.split()
 
-    def act(self, players, state):
+    def act(self, players: tp.List[Player], state):
         result_actions = {"type": Turn.N_DOCTORS, "healed": [], "failed_to_heal": [], "killed": None}
         for p, d in zip(self.targets, self.dos):
             if d == "heal":
-                if players[p]["genome"] is not Genome.HOST:
+                if players[p]["genome"] is not Genome.HOST and p in state["mutants"]:
                     state["mutants"].remove(p)
                     result_actions["healed"].append(p)
                 else:
@@ -88,9 +94,9 @@ class DoctorTurn(AbstractTurn):
 
 
 class ComputerScientistTurn(AbstractTurn):
-    def __init__(self, target):
+    def __init__(self, action: ActionMessage) -> None:
         super().__init__(Turn.N_COMPUTER_SCIENTIST)
-        self.target = target
+        self.target = action.target
 
     def act(self, players, state):
         return {"type": Turn.N_COMPUTER_SCIENTIST, "n_mutants": len(state["mutants"])}
@@ -99,18 +105,18 @@ class ComputerScientistTurn(AbstractTurn):
         return {"target": self.target}
 
 
-def create_turn(turn_type, **kwargs):
+def create_turn(turn_type: Turn, action: ActionMessage) -> AbstractTurn:
     TURN_CLASSES = {
         Turn.D_CHIEF_ELECTION: ChiefElectionTurn,
-        Turn.D_AUTOPSY: None,
-        Turn.D_VOTE: None,
-        Turn.D_EXECUTION: None,
+        #  Turn.D_AUTOPSY: None,
+        #  Turn.D_VOTE: None,
+        #  Turn.D_EXECUTION: None,
         Turn.N_MUTANTS: MutantTurn,
         Turn.N_DOCTORS: DoctorTurn,
         Turn.N_COMPUTER_SCIENTIST: ComputerScientistTurn,
-        Turn.N_PSYCHOLOGIST: None,
-        Turn.N_GENETICIST: None,
-        Turn.N_SPY: None,
-        Turn.N_HACKER: None,
+        #  Turn.N_PSYCHOLOGIST: None,
+        #  Turn.N_GENETICIST: None,
+        #  Turn.N_SPY: None,
+        #  Turn.N_HACKER: None,
     }
-    return TURN_CLASSES[turn_type](**kwargs)
+    return TURN_CLASSES[turn_type](action)

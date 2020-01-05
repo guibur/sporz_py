@@ -1,6 +1,12 @@
 import enum
 
 
+class SlotType(enum.Enum):
+    FIRST_DAY = enum.auto()
+    DAY = enum.auto()
+    NIGHT = enum.auto()
+
+
 class Role(enum.Enum):
     ASTRONAUT = enum.auto()
     BASE_MUTANT = enum.auto()
@@ -8,8 +14,10 @@ class Role(enum.Enum):
     COMPUTER_SCIENTIST = enum.auto()
     PSYCHOLOGIST = enum.auto()
     GENETICIST = enum.auto()
-    SPY = enum.auto()
-    HACKER = enum.auto()
+    SPY = enum.auto()  # learn what happened to sb
+    NARK = enum.auto()  # can know if somebody is a fanatic
+    HACKER = enum.auto()  # can steal role of psy, gen or cp
+    INSPECTOR = enum.auto()  # spy, but for previous night
     FANATIC = enum.auto()
 
 
@@ -31,3 +39,5 @@ class Turn(enum.Enum):
     N_GENETICIST = enum.auto()
     N_SPY = enum.auto()
     N_HACKER = enum.auto()
+    N_NARK = enum.auto()
+    N_INSPECTOR = enum.auto()

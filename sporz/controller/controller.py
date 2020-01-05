@@ -1,18 +1,22 @@
+import typing as tp
 import random
 
 from ..model import Game
+from ..view.cli_view import CLIView
+
 from ..enum_api import Role, Genome
+from ..message_api import ActionMessage
 
 
 class Controller:
     def __init__(self, view_class):
-        self.view = view_class(self)
-        self.game = None
+        self.view: CLIView = view_class(self)
+        self.game: tp.Optional[Game] = None
 
-    def launch(self):
+    def launch(self) -> None:
         self.view.ask_player_names()
 
-    def set_game(self, players):
+    def set_game(self, players: tp.List[str]) -> None:
         assert len(players) > 5
         self.game = Game(players)
 
@@ -47,17 +51,21 @@ class Controller:
                 break
         self.view.suggest_roles_genes(self.game.get_player_names(), roles_to_dist, genomes_to_suggest)
 
-    def set_roles_and_genomes_then_start_game(self, roles, genomes):
+    def set_roles_and_genomes_then_start_game(self, roles: tp.List[Role], genomes: tp.List[Genome]) -> None:
+        assert isinstance(self.game, Game)
         self.game.set_roles_and_genomes(roles, genomes)
         self.set_next_turn()
 
-    def set_next_turn(self):
+    def set_next_turn(self) -> None:
+        assert isinstance(self.game, Game)
         next_turn = self.game.get_next_turn()
         self.view.show_next_turn_actions(next_turn)
 
-    def act(self, action):
-        action_result = self.game.act(**action)
+    def act(self, action: ActionMessage) -> None:
+        assert isinstance(self.game, Game)
+        action_result = self.game.act(action)
         self.view.show_turn_results(action_result)
 
-    def get_full_game_state(self):
+    def get_full_game_state(self) -> None:
+        assert isinstance(self.game, Game)
         self.view.show_full_state(self.game.get_full_current_state())

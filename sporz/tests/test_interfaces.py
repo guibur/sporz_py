@@ -8,3 +8,5 @@ from sporz.controller import Controller
 def test_chief_election():
     mock_controller = Mock(spec=Controller)
     view = CLIView(mock_controller)
+
+    #  res_action_view = action_mutant

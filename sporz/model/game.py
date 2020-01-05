@@ -1,7 +1,9 @@
 import typing as tp
 from copy import copy
 
-from ..enum_api import Role, Genome, Turn
+from ..enum_api import Role, Genome, Turn, SlotType
+from ..message_api import State, Slot, Player, PlayerState
+from ..message_api import PreActionMessage, ActionMessage, ResultMessage
 from .turn import create_turn, AbstractTurn
 
 
@@ -11,12 +13,11 @@ NIGHT_STATE_ORDER = [
     Turn.N_COMPUTER_SCIENTIST,
     Turn.N_PSYCHOLOGIST,
     Turn.N_GENETICIST,
-    Turn.N_SPY,
+    Turn.N_NARK,
     Turn.N_HACKER,
+    Turn.N_SPY,
+    Turn.N_INSPECTOR,
 ]
-
-StringOrRG = tp.Union[None, str, bool, Role, Genome]
-GameType = tp.TypeVar("GameType", bound="Game")
 
 
 class Game:
@@ -26,10 +27,8 @@ class Game:
         player_roles: tp.Optional[tp.List[Role]] = None,
         player_genomes: tp.Optional[tp.List[Genome]] = None,
     ) -> None:
-        self.slots: tp.List[tp.Dict[str, tp.Any]] = []
-        self.players: tp.List[tp.Dict[str, StringOrRG]] = [
-            {"name": name, "role": None, "genome": None} for name in player_names
-        ]
+        self.slots: tp.List[Slot] = []
+        self.players: tp.List[Player] = [Player(name=name, role=None, genome=None) for name in player_names]
         if player_roles and player_genomes:
             self.set_roles_and_genomes(player_roles, player_genomes)
         elif player_roles or player_genomes:
@@ -37,13 +36,13 @@ class Game:
 
     def set_roles_and_genomes(self, player_roles: tp.List[Role], player_genomes: tp.List[Genome]) -> None:
         for i, (role, genome) in enumerate(zip(player_roles, player_genomes)):
-            self.players[i]["role"] = role
-            self.players[i]["genome"] = genome
+            self.players[i].role = role
+            self.players[i].genome = genome
 
     def get_players(self, player_role: Role) -> tp.List[int]:
         found_players = []
         for i, p in enumerate(self.players):
-            if p["role"] is player_role:
+            if p.role is player_role:
                 found_players.append(i)
         return found_players
 
@@ -51,7 +50,7 @@ class Game:
         return [p["name"] for p in self.players]  # type: ignore
 
     def get_last_turn(self) -> AbstractTurn:
-        return self.slots[-1]["turns"][-1]
+        return self.slots[-1].turns[-1]
 
     def get_next_turn(self, current_turn: tp.Optional[Turn] = None) -> Turn:
         # Starting a game.
@@ -69,85 +68,82 @@ class Game:
             return Turn.N_DOCTORS
         raise NotImplementedError
 
-    def get_prepare_action_info(self, turn_type: Turn) -> tp.Dict[str, tp.Any]:
+    def get_prepare_action_info(self, turn_type: Turn) -> PreActionMessage:
         # Starting a game.
         if turn_type is Turn.D_CHIEF_ELECTION:
-            return {
-                "type": Turn.D_CHIEF_ELECTION,
-                "choices": self.get_player_names(),
-                "excluded": self.resolve_state()["dead"],
-            }
+            return PreActionMessage(
+                type=Turn.D_CHIEF_ELECTION,
+                choices=self.get_player_names(),
+                excluded=self.resolve_state().deads,
+            )
         if turn_type is Turn.N_MUTANTS:
-            return {
-                "type": Turn.N_MUTANTS,
-                "players": [self.players[i]["name"] for i in self.get_mutants()],
-                "choices": self.get_player_names(),
-                "excluded": self.resolve_state()["dead"],
-            }
+            return PreActionMessage(
+                type=Turn.N_MUTANTS,
+                players=[self.players[i].name for i in self.get_mutants()],
+                choices=self.get_player_names(),
+                excluded=self.resolve_state().deads,
+            )
 
         if turn_type is Turn.N_DOCTORS:
             doctors = self.get_players(Role.DOCTOR)
             state = self.resolve_state()
-            living_doctors = [p for p in doctors if p not in state["dead"]]
-            return {
-                "type": Turn.N_DOCTORS,
-                "players": living_doctors,
-                "paralyzed": [p != state["paralyzed"] for p in living_doctors],
-                "mutated": [p not in state["mutants"] for p in living_doctors],
-                "choices": self.get_player_names(),
-                "excluded": self.resolve_state()["dead"],
-            }
+            living_doctors = [p for p in doctors if p not in state.deads]
+            return PreActionMessage(
+                type=Turn.N_DOCTORS,
+                players=[self.players[p].name for p in living_doctors],
+                paralyzed=[p != state.paralyzed for p in living_doctors],
+                mutated=[p not in state.mutants for p in living_doctors],
+                choices=self.get_player_names(),
+                excluded=state.deads,
+            )
         raise NotImplementedError
 
     #  def is_game_over(self) -> bool:
     #  pass
 
-    def act(self, **kwargs: tp.Any) -> tp.Dict[str, tp.Any]:
+    def act(self, action: ActionMessage) -> ResultMessage:
         turn_type = self.get_next_turn()
         if not self.slots:
-            self.slots.append({"type": "first_day", "turns": []})
+            self.slots.append(Slot(type=SlotType.FIRST_DAY, turns=[]))
         elif turn_type is Turn.N_MUTANTS:
-            self.slots.append({"type": "night", "turns": []})
-        elif (turn_type is Turn.D_AUTOPSY or turn_type is Turn.D_VOTE) and self.slots[-1]["type"] == "night":
-            self.slots.append({"type": "day", "turns": []})
-        self.slots[-1]["turns"].append(create_turn(turn_type, **kwargs))
+            self.slots.append(Slot(type=SlotType.NIGHT, turns=[]))
+        elif (turn_type is Turn.D_AUTOPSY or turn_type is Turn.D_VOTE) and self.slots[-1].type == SlotType.NIGHT:
+            self.slots.append(Slot(type=SlotType.DAY, turns=[]))
+        self.slots[-1].turns.append(create_turn(turn_type, action))
         state_just_before = self.resolve_state()
         return self.get_last_turn().act(self.players, state_just_before)
 
-    def resolve_state(self) -> tp.Dict[str, tp.Any]:
-        state: tp.Dict[str, tp.Any] = {
-            "chief": None,
-            "mutants": set(),
-            "dead": set(),
-            "paralyzed": None,
-        }
+    def resolve_state(self) -> State:
+        state: State = State(
+            chief=None, mutants=set(), deads=set(), paralyzed=None,
+        )
         for i, p in enumerate(self.players):
-            if p["role"] is Role.BASE_MUTANT:
-                state["mutants"].add(i)
+            if p.role is Role.BASE_MUTANT:
+                state.mutants.add(i)
         for slot in self.slots:
-            for turn in slot["turns"]:
+            for turn in slot.turns:
                 turn.act(self.players, state)
         return state
 
-    def get_full_current_state(self) -> tp.List[tp.Dict[str, tp.Any]]:
+    def get_full_current_state(self) -> tp.List[PlayerState]:
         state = self.resolve_state()
         full_state = []
         for idx, player in enumerate(self.players):
-            full_state.append(copy(player))
-            full_state[-1]["chief"] = idx == state["chief"]
-            full_state[-1]["mutant"] = idx in state["mutants"]
-            full_state[-1]["dead"] = idx in state["dead"]
-            full_state[-1]["paralyzed"] = idx == state["paralyzed"]
+            full_state.append(PlayerState.copy(player))
+            full_state[-1].chief = idx == state.chief
+            full_state[-1].mutant = idx in state.mutants
+            full_state[-1].dead = idx in state.deads
+            full_state[-1].paralyzed = idx == state.paralyzed
         return full_state
 
-    def resolve_state_current_slot(self) -> tp.Dict[str, tp.Any]:
-        state: tp.Dict[str, tp.Any] = {"chief": None, "mutants": set(), "dead": set(), "paralyzed": None}
-        for turn in self.slots[-1]["turns"]:
-            turn.act(state)
+    def resolve_state_current_slot(self) -> State:
+        state: State = State(chief=None, mutants=set(), deads=set(), paralyzed=None)
+        for turn in self.slots[-1].turns:
+            turn.act(self.players, state)
         return state
 
     def get_mutants(self) -> tp.Set[int]:
-        return self.resolve_state()["mutants"]
+        return self.resolve_state().mutants
 
     def player_is_mutant(self, idx: int) -> bool:
         return idx in self.get_mutants()
@@ -156,7 +152,7 @@ class Game:
     #  pass
 
     def player_name(self, idx: int) -> str:
-        return self.players[idx]["name"]  # type: ignore
+        return self.players[idx].name  # type: ignore
 
     def player_is_paralyzed(self, idx: int) -> bool:
-        return idx == self.resolve_state()["paralyzed"]
+        return idx == self.resolve_state().paralyzed

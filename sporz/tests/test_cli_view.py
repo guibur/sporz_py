@@ -1,4 +1,5 @@
 from unittest.mock import Mock, patch
+
 from sporz.enum_api import Role, Genome
 from sporz.view.cli_view import CLIView
 from sporz.controller.controller import Controller
