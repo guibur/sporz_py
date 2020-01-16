@@ -9,7 +9,7 @@ from ..message_api import ActionMessage
 
 
 class Controller:
-    def __init__(self, view_class):
+    def __init__(self, view_class: tp.Type[CLIView]) -> None:
         self.view: CLIView = view_class(self)
         self.game: tp.Optional[Game] = None
 

@@ -1,21 +1,26 @@
+import typing as tp
+
 from ..enum_api import Turn, Role, Genome
+from ..message_api import PlayerState
 from colorama import init, Fore
+from ..controller import Controller
+
 
 init()
 
 
 class CLIView:
-    def __init__(self, controller):
-        self.controller = controller
-        self.speech_color = Fore.CYAN
-        self.disabled_choice_color = Fore.BLUE
+    def __init__(self, controller: Controller) -> None:
+        self.controller: Controller = controller
+        self.speech_color: Fore = Fore.CYAN
+        self.disabled_choice_color: Fore = Fore.BLUE
 
-    def print_speech(self, text):
+    def print_speech(self, text: str) -> None:
         print(self.speech_color + text + Fore.RESET)
 
-    def ask_player_names(self):
+    def ask_player_names(self) -> None:
         print("Entrer les noms des joueurs (terminer par une ligne vide):")
-        players = []
+        players: tp.List[str] = []
         name = ""
         while True:
             name = input("{} -> ".format(len(players) + 1))
@@ -25,20 +30,22 @@ class CLIView:
                 break
         self.controller.set_game(players)
 
-    def suggest_roles_genes(self, player_names, roles, genomes):
+    def suggest_roles_genes(self, player_names: tp.List[str], roles: tp.List[Role], genomes: tp.List[Genome]) -> None:
         for player_name, role, genome in zip(player_names, roles, genomes):
             print("{} -> {} / {}".format(player_name, role, genome))
         input("L'attribution convient-elle ? [Y]")
         self.controller.set_roles_and_genomes_then_start_game(roles, genomes)
 
-    def input(self, text):
+    def input(self, text: str) -> str:
         res = input(text + "\nEntrez 's' pour voir l'état courant du jeu")
         if res == "s":
             self.controller.get_full_game_state()
             return self.input(text)
         return res
 
-    def choose_player(self, players, excluded, none_possible=False):
+    def choose_player(
+        self, players: tp.List[str], excluded: tp.Sequence[str], none_possible: bool = False
+    ) -> tp.Optional[int]:
         for index, name in enumerate(players):
             if index in excluded:
                 print(self.disabled_choice_color + "{} -> {}".format(index + 1, name) + Fore.RESET)
@@ -67,8 +74,9 @@ class CLIView:
                     print("{} n'est pas un choix valable.".format(res + 1))
                 else:
                     return res
+        return -1
 
-    def make_choice(self, choices, abbrev):
+    def make_choice(self, choices: tp.List[str], abbrev: tp.List[str]) -> str:
         while True:
             res = input(
                 "Voulez vous {} ? ".format(
@@ -79,8 +87,9 @@ class CLIView:
                 return choices[abbrev.index(res)]
             else:
                 print("Choisir parmi {}".format(" ou ".join(abbrev)))
+        return ""
 
-    def show_full_state(self, full_state):
+    def show_full_state(self, full_state: tp.List[PlayerState]) -> None:
         role_names = {
             Role.ASTRONAUT: "astronaute",
             Role.BASE_MUTANT: "mutant de base",
@@ -98,21 +107,21 @@ class CLIView:
             Genome.HOST: "hôte",
         }
         for player in full_state:
-            if player["dead"]:
+            if player.dead:
                 print(Fore.RED, end="")
-            elif player["mutant"]:
+            elif player.mutant:
                 print(Fore.GREEN, end="")
             print(
                 "{:>15s} | {:.<14s}..{:.>9s} ".format(
-                    player["name"], role_names[player["role"]], genome_names[player["genome"]]
+                    player.name, role_names[player.role], genome_names[player.genome]  # type: ignore
                 ),
                 end="",
             )
-            if player["dead"]:
+            if player.dead:
                 print("\u271D ", end="")
-            if player["chief"] and not player["dead"]:
+            if player.chief and not player.dead:
                 print(Fore.YELLOW + "\u272B" + Fore.RESET, end="")
-            if player["paralyzed"]:
+            if player.paralyzed:
                 print(Fore.MAGENTA + "PARALISÉ", end="")
 
             print(Fore.RESET)

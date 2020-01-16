@@ -56,20 +56,23 @@ class ActionMessage:
 
 @dataclass
 class ResultAction:
+    type: Turn
     main_action: tp.Optional[str]
     main_action_failed: tp.Optional[str]
     killed: tp.Optional[str]
-    paralyzed: tp.Optional[str]
+    paralyzed: tp.Optional[str] = None
 
 
 @dataclass
 class ResultSimpleObservation:
-    target: tp.Optional[tp.Union[str, Role]]
-    result: tp.Optional[tp.Union[bool, Genome, int]]
+    type: Turn
+    target: tp.Optional[tp.Union[str, Role]] = None
+    result: tp.Optional[tp.Union[bool, Genome, int]] = None
 
 
 @dataclass
 class ResultSpyInspector:
+    type: Turn
     target: tp.Optional[str]
     mutated: bool
     paralyzed: bool
